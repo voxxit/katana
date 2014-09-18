@@ -12,7 +12,7 @@ module Katana
 
     adapter = Guillotine::Adapters::RedisAdapter.new redis
 
-    set service: Guillotine::Service.new adapter
+    set service: Guillotine::Service.new(adapter)
 
     # authenticate everything except GETs
     before { protected! if request.request_method != "GET" }
