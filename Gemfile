@@ -1,6 +1,7 @@
-source 'https://rubygems.org'
-ruby '2.1.2'
+source "https://rubygems.org"
 
-gem "guillotine", "1.4.0"
+ruby "2.1.2"
+
+gem "guillotine"
 gem "redis"
 gem "puma"

@@ -1,18 +1,51 @@
-require 'guillotine'
-require 'redis'
+$secret = ENV["SECRET"]
+$db_url = ENV["REDISTOGO_URL"]
+$alpha  = ENV["ALPHABET"]
+
+raise "SECRET & REDISTOGO_URL required. Check `heroku config`" if [$secret, $db_url].any? { |v| !v or v.empty? }
+
+if $alpha.nil? or $alpha.empty?
+  raise "ALPHABET required. Update `heroku config` with: (('a'..'z').to_a + ('A'..'Z').to_a + (0..9).to_a).shuffle.join"
+end
+
+# dependencies
+require "guillotine"
+require "redis"
+require "minuteman"
+
+require_relative "lib/bijective"
+
+# connect to redis
+uri = URI.parse($db_url)
+redis = Redis.new(host: uri.host, port: uri.port, password: uri.password)
+
+# for click tracking
+analytics = Minuteman.new(redis: redis)
 
 module Katana
   class App < Guillotine::App
 
-    uri   = URI.parse ENV["REDISTOGO_URL"]
-    redis = Redis.new host: uri.host, port: uri.port, password: uri.password
-    adapter = Guillotine::Adapters::RedisAdapter.new redis
-    service = Guillotine::Service.new adapter, default_url: ENV["DEFAULT_URL"], strip_anchor: false, strip_query: false
+    use Rack::Session::Cookie, expire_after: 2592000, secret: secret
 
-    set service: service
+    adapter = Guillotine::Adapters::RedisAdapter.new(redis)
+
+    set service: Guillotine::Service.new(adapter,
+      default_url: ENV["DEFAULT_URL"],
+      strip_anchor: false,
+      strip_query: false
+    )
 
     # authenticate everything except GETs
     before { protected! if request.request_method != "GET" }
+
+    get "/:code" do
+      # track the code hit
+      analytics.track("url:hit", session["uid"] ||= SecureRandom.uuid)
+
+      escaped = Addressable::URI.escape(params[:code])
+      status, head, body = settings.service.get(escaped)
+      [status, head, simple_escape(body)]
+    end
 
     helpers do
 
