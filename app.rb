@@ -5,21 +5,14 @@ module Katana
   class App < Guillotine::App
 
     uri   = URI.parse ENV["REDISTOGO_URL"]
-
-    redis = Redis.new host: uri.host,
-                      port: uri.port,
-                      password: uri.password
-
+    redis = Redis.new host: uri.host, port: uri.port, password: uri.password
     adapter = Guillotine::Adapters::RedisAdapter.new redis
+    service = Guillotine::Service.new adapter, default_url: ENV["DEFAULT_URL"], strip_anchor: false, strip_query: false
 
-    set service: Guillotine::Service.new(adapter)
+    set service: service
 
     # authenticate everything except GETs
     before { protected! if request.request_method != "GET" }
-
-    get "/" do
-      redirect "http://voxxit.com"
-    end
 
     helpers do
 
@@ -27,12 +20,12 @@ module Katana
       #
       # Throws 401 if authorization fails
       def protected!
-        return unless ENV["HTTP_USER"]
+        return if ENV["HTTP_USER"].nil?
+        return if authorized?
 
-        unless authorized?
-          response['WWW-Authenticate'] = %(Basic realm="Restricted Area")
-          throw(:halt, [401, "Not authorized\n"])
-        end
+        response['WWW-Authenticate'] = %(Basic realm="Restricted Area")
+
+        throw :halt, [401, "Not authorized\n"]
       end
 
       # Private: helper method to check if authorization parameters match the set environment variables
